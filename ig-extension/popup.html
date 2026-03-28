@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instagram Unfollow Detector</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0f;
+    --surface: #15151a;
+    --surface2: #1e1e26;
+    --border: #252530;
+    --accent: #e040fb;
+    --accent2: #7c4dff;
+    --grad: linear-gradient(135deg, #e040fb, #7c4dff);
+    --text: #f0eeff;
+    --muted: #5a5a72;
+    --success: #69ffb4;
+    --danger: #ff4d6d;
+    --warn: #ffb347;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 380px;
+    min-height: 500px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* Top bar */
+  .topbar {
+    padding: 16px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+  }
+
+  .logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: var(--grad);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    box-shadow: 0 0 16px rgba(224, 64, 251, 0.35);
+    flex-shrink: 0;
+  }
+
+  .app-name {
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+
+  .app-sub {
+    font-size: 0.62rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Screens */
+  .screen { display: none; padding: 24px 20px; }
+  .screen.active { display: block; }
+
+  /* ── SCREEN: NOT ON INSTAGRAM ── */
+  .goto-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px 24px;
+    text-align: center;
+  }
+
+  .goto-card .icon { font-size: 2.5rem; margin-bottom: 16px; }
+  .goto-card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+  .goto-card p {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+
+  /* ── SCREEN: HOME ── */
+  .profile-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .profile-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    flex-shrink: 0;
+  }
+
+  .profile-info h3 { font-size: 0.9rem; font-weight: 700; }
+  .profile-info p { font-size: 0.72rem; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 2px; }
+
+  .scan-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--grad);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: -0.01em;
+    box-shadow: 0 4px 20px rgba(224, 64, 251, 0.3);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .scan-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(224, 64, 251, 0.45); }
+  .scan-btn:active { transform: translateY(0); }
+  .scan-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .last-scan {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    text-align: center;
+  }
+
+  /* Previous result preview */
+  .prev-result {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 20px;
+    margin-top: 16px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .prev-result:hover { border-color: var(--accent2); }
+
+  .prev-result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .prev-result-header span {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .prev-result-header .badge {
+    background: rgba(224, 64, 251, 0.15);
+    border: 1px solid rgba(224, 64, 251, 0.3);
+    color: var(--accent);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+  }
+
+  .prev-result p {
+    font-size: 0.8rem;
+    color: #aaa;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .prev-result p strong { color: var(--text); }
+
+  /* ── SCREEN: SCANNING ── */
+  .scan-visual {
+    text-align: center;
+    padding: 10px 0 20px;
+  }
+
+  .pulse-ring {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(224, 64, 251, 0.1);
+    border: 2px solid rgba(224, 64, 251, 0.3);
+    margin: 0 auto 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    animation: pulseRing 2s ease-in-out infinite;
+  }
+
+  .pulse-ring::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1px solid rgba(224, 64, 251, 0.15);
+    animation: pulseRing 2s ease-in-out infinite 0.3s;
+  }
+
+  .pulse-ring::after {
+    content: '';
+    position: absolute;
+    inset: -16px;
+    border-radius: 50%;
+    border: 1px solid rgba(224, 64, 251, 0.07);
+    animation: pulseRing 2s ease-in-out infinite 0.6s;
+  }
+
+  @keyframes pulseRing {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.7; }
+  }
+
+  .pulse-icon { font-size: 2rem; z-index: 1; }
+
+  .scan-status {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .scan-detail {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    margin-bottom: 24px;
+    min-height: 18px;
+  }
+
+  .progress-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .prog-item {}
+  .prog-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .prog-label .count { color: var(--text); font-weight: 500; }
+
+  .prog-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .prog-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--grad);
+    width: 0%;
+    transition: width 0.4s ease;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+  }
+
+  .warn-box {
+    background: rgba(255, 179, 71, 0.08);
+    border: 1px solid rgba(255, 179, 71, 0.2);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-top: 20px;
+    font-size: 0.72rem;
+    font-family: 'DM Mono', monospace;
+    color: var(--warn);
+    line-height: 1.5;
+  }
+
+  /* ── SCREEN: RESULTS ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 10px;
+    text-align: center;
+  }
+
+  .stat-n {
+    font-size: 1.8rem;
+    font-weight: 800;
+    letter-spacing: -0.05em;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-n.purple { color: var(--accent); }
+  .stat-n.green { color: var(--success); }
+  .stat-n.blue { color: #64b5f6; }
+
+  .stat-l {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .results-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .search-input {
+    flex: 1;
+    padding: 9px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    transition: border-color 0.2s;
+  }
+
+  .search-input:focus { outline: none; border-color: var(--accent2); }
+
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+
+  .icon-btn:hover { border-color: var(--accent2); }
+
+  .ghost-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 280px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+  }
+
+  .ghost-list::-webkit-scrollbar { width: 4px; }
+  .ghost-list::-webkit-scrollbar-track { background: transparent; }
+  .ghost-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .ghost-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: all 0.15s;
+    animation: slideIn 0.2s ease both;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .ghost-item:hover {
+    background: var(--surface2);
+    border-color: rgba(224, 64, 251, 0.25);
+    transform: translateX(3px);
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-6px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .ghost-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--grad);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+    overflow: hidden;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .ghost-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+
+  .ghost-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ghost-badges {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .badge-small {
+    font-size: 0.55rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+
+  .badge-private {
+    background: rgba(255, 77, 109, 0.12);
+    border: 1px solid rgba(255, 77, 109, 0.25);
+    color: var(--danger);
+  }
+
+  .badge-verified {
+    background: rgba(100, 181, 246, 0.12);
+    border: 1px solid rgba(100, 181, 246, 0.25);
+    color: #64b5f6;
+  }
+
+  .arrow-icon { font-size: 0.7rem; color: var(--muted); flex-shrink: 0; }
+
+  .rescan-btn {
+    width: 100%;
+    padding: 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--muted);
+    font-family: 'Syne', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 14px;
+    letter-spacing: -0.01em;
+  }
+
+  .rescan-btn:hover { border-color: var(--accent2); color: var(--text); }
+
+  .empty-ghosts {
+    text-align: center;
+    padding: 30px 20px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+
+  .empty-ghosts .em { font-size: 2rem; margin-bottom: 10px; }
+
+  /* Buttons generic */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 11px 18px;
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s;
+    border: none;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+    color: white;
+  }
+
+  .btn-primary { background: var(--grad); box-shadow: 0 4px 16px rgba(224,64,251,0.25); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(224,64,251,0.4); }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .btn-outline:hover { border-color: var(--accent2); }
+
+  .error-box {
+    background: rgba(255, 77, 109, 0.08);
+    border: 1px solid rgba(255, 77, 109, 0.25);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--danger);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+
+  .count-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    text-align: right;
+    margin-bottom: 6px;
+    letter-spacing: 0.06em;
+  }
+
+  footer {
+    padding: 10px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  footer span {
+    font-size: 0.6rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* Spinner animation */
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .spin {
+    display: inline-block;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+
+  /* Bouton scan : state initial avec contenu */
+  #btnScan { display: flex; align-items: center; justify-content: center; gap: 8px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">👁</div>
+  <div>
+    <div class="app-name">Unfollow Detector</div>
+    <div class="app-sub">Instagram · Analyse locale</div>
+  </div>
+</div>
+
+<!-- SCREEN 1: Pas sur Instagram -->
+<div class="screen active" id="screenNotIG">
+  <div class="goto-card">
+    <div class="icon">📸</div>
+    <h2>Ouvre Instagram d'abord</h2>
+    <p>Pour scanner tes abonnements, tu dois être connecté sur Instagram dans cet onglet.</p>
+    <a href="https://www.instagram.com" target="_blank" class="btn btn-primary" style="width:100%;margin-top:4px;">
+      Aller sur Instagram ↗
+    </a>
+  </div>
+</div>
+
+<!-- SCREEN 2: Home (connecté) -->
+<div class="screen" id="screenHome">
+  <div class="profile-card">
+    <div class="profile-dot"></div>
+    <div class="profile-info">
+      <h3 id="profileName">Connecté</h3>
+      <p id="profileStatus">Session Instagram active</p>
+    </div>
+  </div>
+
+  <button class="scan-btn" id="btnScan">🔍 Lancer le scan</button>
+    🔍 Lancer le scan
+  </button>
+
+  <div class="last-scan" id="lastScanInfo"></div>
+
+  <div class="prev-result" id="prevResult" style="display:none">
+    <div class="prev-result-header">
+      <span>Dernier scan</span>
+      <div class="badge" id="prevBadge">0 fantômes</div>
+    </div>
+    <p id="prevDesc">Clique pour voir les résultats →</p>
+  </div>
+</div>
+
+<!-- SCREEN 3: Scan en cours -->
+<div class="screen" id="screenScan">
+  <div class="scan-visual">
+    <div class="pulse-ring"><div class="pulse-icon">🔍</div></div>
+    <div class="scan-status" id="scanStatusText">Initialisation...</div>
+    <div class="scan-detail" id="scanDetailText"></div>
+  </div>
+
+  <div class="progress-bars">
+    <div class="prog-item">
+      <div class="prog-label">
+        <span>Abonnés (followers)</span>
+        <span class="count" id="progFollowersCount">0</span>
+      </div>
+      <div class="prog-track"><div class="prog-fill" id="progFollowers"></div></div>
+    </div>
+    <div class="prog-item">
+      <div class="prog-label">
+        <span>Abonnements (following)</span>
+        <span class="count" id="progFollowingCount">0</span>
+      </div>
+      <div class="prog-track"><div class="prog-fill" id="progFollowing"></div></div>
+    </div>
+  </div>
+
+  <div class="warn-box">
+    ⚠️ Ne ferme pas cet onglet pendant le scan. Une pause automatique est appliquée entre les requêtes pour éviter les limitations d'Instagram.
+  </div>
+</div>
+
+<!-- SCREEN 4: Error -->
+<div class="screen" id="screenError">
+  <div class="error-box" id="errorText"></div>
+  <button class="btn btn-outline" id="btnBackHome" style="width:100%">← Retour</button>
+</div>
+
+<!-- SCREEN 5: Results -->
+<div class="screen" id="screenResults">
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-n purple" id="resGhosts">0</div>
+      <div class="stat-l">Fantômes</div>
+    </div>
+    <div class="stat">
+      <div class="stat-n green" id="resFollowers">0</div>
+      <div class="stat-l">Abonnés</div>
+    </div>
+    <div class="stat">
+      <div class="stat-n blue" id="resFollowing">0</div>
+      <div class="stat-l">Following</div>
+    </div>
+  </div>
+
+  <div class="results-toolbar">
+    <input class="search-input" type="text" id="searchGhosts" placeholder="🔎 Rechercher...">
+    <button class="icon-btn" id="btnExport" title="Export CSV">📥</button>
+    <button class="icon-btn" id="btnHomeFromResults" title="Accueil">🏠</button>
+  </div>
+
+  <div class="count-label" id="ghostCountLabel"></div>
+  <div class="ghost-list" id="ghostList"></div>
+
+  <button class="rescan-btn" id="btnRescan">🔄 Nouveau scan</button>
+</div>
+
+<footer>
+  <span>100% local · données non partagées</span>
+  <span id="footerVersion">v1.0</span>
+</footer>
+
+<script src="popup.js"></script>
+</body>
+</html>
