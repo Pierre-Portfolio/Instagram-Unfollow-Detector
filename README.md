@@ -1,17 +1,13 @@
-# 👁 Instagram Unfollow Detector (Chrome Extension)
+# 👁 Instagram Unfollow Detector
 
-Détecte facilement les comptes Instagram qui ne te suivent pas en retour
-("ghost followers") en quelques secondes.
+> Chrome extension pour détecter rapidement les comptes qui ne te
+> suivent pas en retour sur Instagram.
 
 ------------------------------------------------------------------------
 
-## 🖼 Aperçu
-
-### Extension
+## ✨ Aperçu
 
 ![UI](assets/UI.png)
-
-### Icône
 
 ![Header](assets/header.png)
 
@@ -19,82 +15,92 @@ Détecte facilement les comptes Instagram qui ne te suivent pas en retour
 
 ## 🚀 Fonctionnalités
 
--   🔍 Scan automatique de tes abonnements
--   👻 Détection des comptes qui ne te suivent pas en retour
--   ⚡ Résultats rapides (quelques secondes à quelques minutes selon ton
-    nombre d'abonnements)
--   🔗 Accès direct aux profils détectés
--   🧩 Interface simple et intuitive
+-   🔍 Analyse automatique de tes abonnements
+-   👻 Détection des "ghost followers"
+-   ⚡ Scan rapide (adapté au nombre de comptes)
+-   🔗 Accès direct aux profils
+-   🧩 Interface simple et efficace
 
 ------------------------------------------------------------------------
 
-## 📦 Installation
+## 🧠 Comment ça marche ?
 
-1.  Clone le repository :
+L'extension analyse ta liste d'abonnements et la compare avec ta liste
+d'abonnés afin d'identifier les comptes qui ne te suivent pas en retour.
+
+------------------------------------------------------------------------
+
+## 🛠 Installation
+
+1.  Clone le repo :
 
 ``` bash
 git clone https://github.com/Pierre-Portfolio/Instagram-Unfollow-Detector.git
 ```
 
-2.  Ouvre Chrome et va sur : chrome://extensions/
+2.  Va sur Chrome :
 
-3.  Active le **mode développeur** (en haut à droite)
+```{=html}
+<!-- -->
+```
+    chrome://extensions/
 
-4.  Clique sur **"Charger l'extension non empaquetée"**
+3.  Active le **mode développeur**
+
+4.  Clique sur **Charger l'extension non empaquetée**
 
 5.  Sélectionne le dossier du projet
 
 ------------------------------------------------------------------------
 
-## 🛠 Utilisation
+## ▶️ Utilisation
 
-1.  Va sur 👉 https://www.instagram.com\
-2.  Connecte-toi à ton compte\
-3.  Clique sur l'icône 👁 de l'extension\
+1.  Va sur https://www.instagram.com\
+2.  Connecte-toi\
+3.  Clique sur l'icône 👁\
 4.  Clique sur **"Lancer le scan"**\
-5.  Attends (de quelques secondes à quelques minutes selon ton nombre de
-    comptes)
+5.  Patiente pendant l'analyse
 
 ------------------------------------------------------------------------
 
-## ✅ Résultats
+## 📊 Résultats
 
--   Liste complète des comptes qui ne te suivent pas en retour
--   Chaque profil est **cliquable** pour y accéder directement
-
-------------------------------------------------------------------------
-
-## ⚠️ Important
-
--   Fonctionne uniquement si tu es **connecté à Instagram**
--   Le temps de scan dépend du nombre d'abonnements
--   À utiliser de manière responsable (respect des règles Instagram)
+-   Liste complète des comptes qui ne te suivent pas
+-   Profils cliquables directement
 
 ------------------------------------------------------------------------
 
-## 📁 Structure du projet
+## ⚠️ Limitations
 
-assets/ → Images & icônes\
-src/ → Code source\
-manifest.json → Configuration de l'extension
+-   Nécessite d'être connecté à Instagram
+-   Temps de scan variable selon ton nombre d'abonnements
+-   Peut être impacté par les changements d'Instagram
 
 ------------------------------------------------------------------------
 
-## 💡 Idées d'amélioration
+## 📁 Structure
 
--   Bouton "Unfollow" direct
--   Export des résultats (CSV)
--   Historique des scans
--   Filtres avancés
+    assets/        → Images
+    src/           → Code source
+    manifest.json  → Config extension
+
+------------------------------------------------------------------------
+
+## 💡 Roadmap
+
+-   [ ] Bouton Unfollow
+-   [ ] Export CSV
+-   [ ] Historique
+-   [ ] Filtres avancés
 
 ------------------------------------------------------------------------
 
 ## 👨‍💻 Auteur
 
-**Pierre**
+Pierre
 
 ------------------------------------------------------------------------
 
 ## 📜 Licence
 
-MIT License -- libre d'utilisation et de modification
+MIT License
