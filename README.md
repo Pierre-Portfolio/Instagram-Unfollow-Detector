@@ -1,106 +1,95 @@
-# 👁 Instagram Unfollow Detector
-
-> Chrome extension pour détecter rapidement les comptes qui ne te
-> suivent pas en retour sur Instagram.
-
-------------------------------------------------------------------------
-
-## ✨ Aperçu
-
-![UI](assets/UI.png)
-
-![Header](assets/header.png)
-
-------------------------------------------------------------------------
-
-## 🚀 Fonctionnalités
-
--   🔍 Analyse automatique de tes abonnements
--   👻 Détection des "ghost followers"
--   ⚡ Scan rapide (adapté au nombre de comptes)
--   🔗 Accès direct aux profils
--   🧩 Interface simple et efficace
-
-------------------------------------------------------------------------
-
-## 🧠 Comment ça marche ?
-
-L'extension analyse ta liste d'abonnements et la compare avec ta liste
-d'abonnés afin d'identifier les comptes qui ne te suivent pas en retour.
-
-------------------------------------------------------------------------
-
-## 🛠 Installation
-
-1.  Clone le repo :
-
-``` bash
-git clone https://github.com/Pierre-Portfolio/Instagram-Unfollow-Detector.git
+```{=html}
+<h1 align="center">
 ```
-
-2.  Va sur Chrome :
+`<img src="./assets/images/github/header.png" alt="Instagram Unfollow Detector" />`{=html}
 
 ```{=html}
-<!-- -->
+</h1>
 ```
-    chrome://extensions/
+`<img src="./assets/images/github/star.gif" alt="star" />`{=html}
 
-3.  Active le **mode développeur**
+```{=html}
+<p align="center">
+```
+`<img src="https://img.shields.io/badge/JavaScript-Chrome_Extension-yellow?logo=javascript&logoColor=white" />`{=html}
 
-4.  Clique sur **Charger l'extension non empaquetée**
+`<img src="https://img.shields.io/badge/Platform-Chrome-blue?logo=googlechrome&logoColor=white" />`{=html}
 
-5.  Sélectionne le dossier du projet
+`<img src="https://img.shields.io/badge/Statut-Opérationnel-success" />`{=html}
 
-------------------------------------------------------------------------
+`<img src="https://img.shields.io/badge/Année-2026-lightgrey" />`{=html}
 
-## ▶️ Utilisation
-
-1.  Va sur https://www.instagram.com\
-2.  Connecte-toi\
-3.  Clique sur l'icône 👁\
-4.  Clique sur **"Lancer le scan"**\
-5.  Patiente pendant l'analyse
-
-------------------------------------------------------------------------
-
-## 📊 Résultats
-
--   Liste complète des comptes qui ne te suivent pas
--   Profils cliquables directement
+```{=html}
+</p>
+```
 
 ------------------------------------------------------------------------
 
-## ⚠️ Limitations
+# Instagram Unfollow Detector -- Détection des non-followers
 
--   Nécessite d'être connecté à Instagram
--   Temps de scan variable selon ton nombre d'abonnements
--   Peut être impacté par les changements d'Instagram
+## Aperçu
+
+Extension Chrome qui analyse ton compte Instagram et détecte
+automatiquement les comptes qui ne te suivent pas en retour --- fini les
+vérifications manuelles interminables.
+
+## Objectifs
+
+-   Automatiser l'analyse des abonnements Instagram.
+
+-   Identifier rapidement les "ghost followers".
+
+-   Fournir un accès direct aux profils détectés.
+
+-   Proposer un outil simple, rapide et efficace directement dans le
+    navigateur.
+
+## Technologies
+
+-   JavaScript
+
+-   Chrome Extension API
+
+-   DOM Scraping
+
+## Fonctionnement
+
+    Scan des abonnements  →  Comparaison avec les abonnés  →  Affichage des non-followers
+
+1.  L'utilisateur lance le scan depuis l'extension
+
+2.  L'outil récupère la liste des abonnements et des abonnés
+
+3.  Il compare les deux listes
+
+4.  Les comptes ne suivant pas en retour sont affichés
+
+## Utilisation
+
+``` bash
+1. Va sur https://www.instagram.com
+2. Connecte-toi à ton compte
+3. Clique sur l’icône 👁 de l’extension
+4. Clique sur "Lancer le scan"
+5. Attends le résultat
+```
+
+## Résultat
+
+-   Liste complète des comptes qui ne te suivent pas en retour
+
+-   Profils cliquables directement pour accéder à leur page
+
+## Auteur
+
+-   [Pierre Petillion](https://github.com/Pierre-Portfolio/)
 
 ------------------------------------------------------------------------
 
-## 📁 Structure
-
-    assets/        → Images
-    src/           → Code source
-    manifest.json  → Config extension
-
-------------------------------------------------------------------------
-
-## 💡 Roadmap
-
--   [ ] Bouton Unfollow
--   [ ] Export CSV
--   [ ] Historique
--   [ ] Filtres avancés
-
-------------------------------------------------------------------------
-
-## 👨‍💻 Auteur
-
-Pierre
-
-------------------------------------------------------------------------
-
-## 📜 Licence
-
-MIT License
+```{=html}
+<p align="center">
+```
+Projet réalisé en 2026.
+```{=html}
+</p>
+```
