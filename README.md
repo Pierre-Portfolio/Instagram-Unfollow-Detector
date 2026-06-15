@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="./assets/images/github/header.jpg" alt="Instagram Unfollow Detector" />
+  <img src="./assets/images/github/header-banner.jpg" alt="Instagram Unfollow Detector" />
 </h1>
 <img src="./assets/images/github/star.gif" alt="star" />
 
