@@ -8,10 +8,11 @@ const API_BASE = 'https://www.instagram.com/api/v1';
 // re-parser document.cookie à chaque requête.
 let _session = null;
 function getSessionInfo() {
-  if (_session) return _session;
-
   // Parsing robuste : on coupe sur le PREMIER '=' uniquement, sinon une
   // valeur contenant '=' (ex. base64) serait tronquée.
+  // On relit toujours le cookie : Instagram est une SPA, l'utilisateur peut
+  // changer de compte SANS recharger la page. Le coût d'un parse de cookie est
+  // négligeable, et cela permet d'invalider une session mémoïsée périmée.
   const cookies = document.cookie.split(';').reduce((acc, c) => {
     const idx = c.indexOf('=');
     if (idx === -1) return acc;
@@ -20,11 +21,16 @@ function getSessionInfo() {
   }, {});
 
   const session = { userId: cookies['ds_user_id'], csrfToken: cookies['csrftoken'] };
-  // On ne mémoïse QUE si la session est complète. La page Instagram (SPA) a
-  // pu être chargée avant connexion : figer une session vide casserait le
-  // scan même après une connexion à chaud. Tant que les cookies manquent,
-  // on re-parse à chaque appel.
-  if (session.userId && session.csrfToken) _session = session;
+
+  // Le cache n'est réutilisé que si le MÊME compte est toujours connecté.
+  if (_session && session.userId && _session.userId === session.userId) {
+    return _session;
+  }
+
+  // Compte changé ou session incomplète : on invalide le cache. On ne
+  // mémoïse de nouveau QUE si la session est complète (sinon on re-parsera au
+  // prochain appel, ex. connexion encore en cours sur la SPA).
+  _session = (session.userId && session.csrfToken) ? session : null;
   return _session || session;
 }
 
@@ -37,16 +43,36 @@ async function igFetch(url, retries = 3) {
   if (!csrfToken) {
     throw new Error("Session Instagram introuvable. Connecte-toi sur instagram.com puis réessaie.");
   }
-  const res = await fetch(url, {
-    headers: {
-      'x-ig-app-id': '936619743392459',
-      'x-csrftoken': csrfToken,
-      'x-asbd-id': '198387',
-      'x-requested-with': 'XMLHttpRequest',
-      'Accept': '*/*',
-    },
-    credentials: 'include'
-  });
+  // Timeout dur via AbortController : sans cela une requête qui ne répond
+  // jamais fige le scan entier (ou laisse CHECK_LOGIN sans réponse, popup
+  // bloqué sur « En attente du content script »).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: {
+        'x-ig-app-id': '936619743392459',
+        'x-csrftoken': csrfToken,
+        'x-asbd-id': '198387',
+        'x-requested-with': 'XMLHttpRequest',
+        'Accept': '*/*',
+      },
+      credentials: 'include',
+      signal: controller.signal
+    });
+  } catch (e) {
+    // Timeout (abort) ou erreur réseau : on réessaie avec le même backoff
+    // exponentiel que pour les 429/5xx, puis on abandonne avec un message clair.
+    if (retries > 0) {
+      const attempt = 3 - retries;
+      await sleep(2000 * Math.pow(2, attempt) + Math.random() * 1000);
+      return igFetch(url, retries - 1);
+    }
+    throw new Error("Instagram ne répond pas (délai dépassé ou réseau). Réessaie dans quelques instants.");
+  } finally {
+    clearTimeout(timer);
+  }
   // Backoff EXPONENTIEL sur rate-limit (429) et erreurs serveur (5xx) :
   // 2s, 4s, 8s (+ jitter) — respecte mieux les limites d'Instagram et
   // reduit le risque de blocage temporaire qu'un delai fixe.
@@ -101,12 +127,14 @@ async function fetchAllFriendships(userId, kind, onProgress, idsOnly = false) {
     // Déduplication : si IG renvoie un curseur qui « tourne » (change à
     // chaque page mais re-sert les mêmes comptes), on n'accumule pas de
     // doublons et on évite de gonfler la mémoire jusqu'à MAX_PAGES.
+    const seenBefore = seen.size;
     for (const u of batch) {
       const id = String(u.pk ?? u.id ?? '');
       if (id && seen.has(id)) continue;
       if (id) seen.add(id);
       if (!idsOnly) users.push(u);
     }
+    const addedNew = seen.size - seenBefore;
     prevMaxId = nextMaxId;
     nextMaxId = data?.next_max_id || null;
 
@@ -116,6 +144,10 @@ async function fetchAllFriendships(userId, kind, onProgress, idsOnly = false) {
     // La page vide protège contre les boucles où IG renvoie un curseur qui
     // change à chaque fois mais sans plus aucun utilisateur.
     if (batch.length === 0) break;
+    // Page entièrement composée de doublons : le curseur « tourne » sans
+    // apporter de nouveaux comptes (curseur alternant A,B,A,B… non détecté par
+    // le test prevMaxId ci-dessous) → inutile de continuer jusqu'à MAX_PAGES.
+    if (addedNew === 0) break;
     if (nextMaxId && nextMaxId === prevMaxId) break;
     if (page >= MAX_PAGES) break;
 

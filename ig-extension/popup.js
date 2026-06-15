@@ -49,8 +49,12 @@ async function init() {
 
   chrome.tabs.sendMessage(tab.id, { type: 'CHECK_LOGIN' }, (resp) => {
     if (chrome.runtime.lastError || !resp) {
+      // Content script injoignable (page pas encore prête / en cours de
+      // chargement). Lancer un scan échouerait par une erreur de port : on
+      // désactive le bouton et on indique l'action à faire.
       showScreen('screenHome');
-      document.getElementById('profileStatus').textContent = 'En attente du content script...';
+      document.getElementById('profileStatus').textContent = 'Recharge la page Instagram puis rouvre ce popup';
+      document.getElementById('btnScan').disabled = true;
       return;
     }
     if (resp.loggedIn) {
@@ -91,7 +95,20 @@ function showPrevResult(result) {
     ? new Date(result.scannedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : '';
   document.getElementById('prevBadge').textContent = n + ' fantôme' + (n > 1 ? 's' : '');
-  document.getElementById('prevDesc').innerHTML = '<strong>' + result.totalFollowing + '</strong> abonnements · <strong>' + result.totalFollowers + '</strong> abonnés · ' + date;
+
+  // Construction via le DOM (textContent) plutôt qu'innerHTML : robuste si la
+  // donnée stockée est incomplète/legacy (affichait « undefined ») et pas de
+  // concaténation HTML sur des données persistées.
+  const desc = document.getElementById('prevDesc');
+  desc.textContent = '';
+  const following = document.createElement('strong');
+  following.textContent = result.totalFollowing ?? 0;
+  const followers = document.createElement('strong');
+  followers.textContent = result.totalFollowers ?? 0;
+  desc.appendChild(following);
+  desc.appendChild(document.createTextNode(' abonnements · '));
+  desc.appendChild(followers);
+  desc.appendChild(document.createTextNode(' abonnés' + (date ? ' · ' + date : '')));
   document.getElementById('prevResult').style.display = 'block';
 }
 
@@ -170,7 +187,8 @@ async function startScan() {
 // d'éléments chargés (15% → 90%) pour qu'elle bouge visiblement sans jamais
 // « finir » prématurément.
 function approxWidth(count) {
-  return Math.min(90, 15 + (count || 0) * 0.05) + '%';
+  if (!count) return '0%';
+  return Math.min(90, 15 + count * 0.05) + '%';
 }
 
 function updateProgress(p) {
