@@ -1,17 +1,18 @@
 // popup.js — tous les event listeners sont ici, zéro inline HTML
 
 let currentResult = null;
-let progressTimer = null;
+let filterTimer = null;
 
 // ── Enregistrement des listeners (DOMContentLoaded) ───
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnScan').addEventListener('click', startScan);
   document.getElementById('prevResult').addEventListener('click', showResults);
   document.getElementById('btnBackHome').addEventListener('click', () => showScreen('screenHome'));
-  document.getElementById('searchGhosts').addEventListener('input', filterGhosts);
+  document.getElementById('searchGhosts').addEventListener('input', onFilterInput);
   document.getElementById('btnExport').addEventListener('click', exportCSV);
   document.getElementById('btnHomeFromResults').addEventListener('click', () => showScreen('screenHome'));
   document.getElementById('btnRescan').addEventListener('click', startScan);
+  document.getElementById('footerVersion').textContent = 'v' + chrome.runtime.getManifest().version;
   init();
 });
 
@@ -86,7 +87,6 @@ async function startScan() {
   }
 
   showScreen('screenScan');
-  chrome.storage.local.remove('scanProgress');
   document.getElementById('scanStatusText').textContent = 'Connexion à Instagram...';
   document.getElementById('scanDetailText').textContent = 'Récupération de la session';
   document.getElementById('progFollowers').style.width = '5%';
@@ -94,41 +94,47 @@ async function startScan() {
   document.getElementById('progFollowersCount').textContent = '...';
   document.getElementById('progFollowingCount').textContent = '...';
 
-  startProgressPolling();
-
-  chrome.tabs.sendMessage(tab.id, { type: 'START_SCAN' }, (response) => {
-    stopProgressPolling();
+  // Connexion au content script via un port : la progression arrive en
+  // direct, plus besoin de poller chrome.storage.
+  let settled = false;
+  let port;
+  try {
+    port = chrome.tabs.connect(tab.id, { name: 'scan' });
+  } catch (e) {
     setBtnLoading(false);
+    showError('Impossible de communiquer avec Instagram.\nRecharge la page instagram.com et réessaie.');
+    return;
+  }
 
-    if (chrome.runtime.lastError) {
-      showError('Impossible de communiquer avec Instagram.\nRecharge la page instagram.com et réessaie.');
-      return;
+  port.onMessage.addListener((msg) => {
+    if (msg.type === 'progress') {
+      updateProgress(msg);
+    } else if (msg.type === 'result') {
+      settled = true;
+      setBtnLoading(false);
+      currentResult = msg.result;
+      renderResults(msg.result);
+      showScreen('screenResults');
+      port.disconnect();
+    } else if (msg.type === 'error') {
+      settled = true;
+      setBtnLoading(false);
+      showError(msg.error || "Erreur inconnue. Assure-toi d'être connecté à Instagram.");
+      port.disconnect();
     }
-
-    if (!response || !response.ok) {
-      showError((response && response.error) || "Erreur inconnue. Assure-toi d'être connecté à Instagram.");
-      return;
-    }
-
-    currentResult = response;
-    renderResults(response);
-    showScreen('screenResults');
   });
+
+  // Déconnexion non sollicitée (content script absent / page rechargée)
+  port.onDisconnect.addListener(() => {
+    if (settled) return;
+    setBtnLoading(false);
+    showError('Impossible de communiquer avec Instagram.\nRecharge la page instagram.com et réessaie.');
+  });
+
+  port.postMessage({ type: 'START_SCAN' });
 }
 
-// ── Progress polling ──────────────────────────────────
-function startProgressPolling() {
-  progressTimer = setInterval(() => {
-    chrome.storage.local.get(['scanProgress'], ({ scanProgress: p }) => {
-      if (p) updateProgress(p);
-    });
-  }, 400);
-}
-
-function stopProgressPolling() {
-  if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
-}
-
+// ── Progression (poussée par le content script) ───────
 function updateProgress(p) {
   const statusEl = document.getElementById('scanStatusText');
   const detailEl = document.getElementById('scanDetailText');
@@ -138,12 +144,12 @@ function updateProgress(p) {
     detailEl.textContent = 'Identification de ton compte';
   } else if (p.status === 'fetching_followers') {
     statusEl.textContent = 'Chargement des abonnés...';
-    detailEl.textContent = p.message || '';
+    detailEl.textContent = 'Abonnés : ' + (p.followersCount || 0) + ' chargés...';
     document.getElementById('progFollowersCount').textContent = p.followersCount || 0;
     document.getElementById('progFollowers').style.width = p.followersCount > 0 ? '70%' : '15%';
   } else if (p.status === 'fetching_following') {
     statusEl.textContent = 'Chargement des abonnements...';
-    detailEl.textContent = p.message || '';
+    detailEl.textContent = 'Abonnements : ' + (p.followingCount || 0) + ' chargés...';
     document.getElementById('progFollowersCount').textContent = p.followersCount || 0;
     document.getElementById('progFollowingCount').textContent = p.followingCount || 0;
     document.getElementById('progFollowers').style.width = '100%';
@@ -249,6 +255,12 @@ function renderGhostList(ghosts) {
   listEl.appendChild(frag);
 }
 
+// ── Recherche (debounce) ──────────────────────────────
+function onFilterInput() {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(filterGhosts, 120);
+}
+
 function filterGhosts() {
   if (!currentResult) return;
   const q = document.getElementById('searchGhosts').value.toLowerCase();
@@ -274,7 +286,7 @@ function exportCSV() {
       return [u.username, u.full_name || '', 'https://www.instagram.com/' + u.username + '/', u.is_private ? 'oui' : 'non', u.is_verified ? 'oui' : 'non'];
     })
   );
-  const csv = '\uFEFF' + rows.map(function(r) { return r.map(esc).join(','); }).join('\r\n');
+  const csv = '﻿' + rows.map(function(r) { return r.map(esc).join(','); }).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

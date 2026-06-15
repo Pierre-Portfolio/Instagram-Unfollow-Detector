@@ -2,9 +2,8 @@
 // Peut accéder aux cookies et à la session Instagram
 
 const API_BASE = 'https://www.instagram.com/api/v1';
-const GRAPH_BASE = 'https://www.instagram.com/graphql/query';
 
-// Récupère le user_id et le csrftoken depuis les cookies/meta
+// Récupère le user_id et le csrftoken depuis les cookies
 function getSessionInfo() {
   const cookies = document.cookie.split(';').reduce((acc, c) => {
     const [k, v] = c.trim().split('=');
@@ -12,8 +11,7 @@ function getSessionInfo() {
     return acc;
   }, {});
 
-  // Cherche aussi dans window._sharedData (ancien) ou dans les scripts
-  let userId = cookies['ds_user_id'];
+  const userId = cookies['ds_user_id'];
   const csrfToken = cookies['csrftoken'];
 
   return { userId, csrfToken };
@@ -41,7 +39,7 @@ async function igFetch(url, retries = 3) {
   return res.json();
 }
 
-// Récupère le user_id depuis le profil courant
+// Récupère le user_id depuis les cookies, la page ou l'API
 async function getMyUserId() {
   const { userId } = getSessionInfo();
   if (userId) return userId;
@@ -61,8 +59,9 @@ async function getMyUserId() {
   return data?.user?.pk_id || data?.user?.pk;
 }
 
-// Récupère TOUS les followers avec pagination
-async function fetchAllFollowers(userId, onProgress) {
+// Récupère TOUS les abonnés OU abonnements avec pagination.
+// kind : 'followers' | 'following'
+async function fetchAllFriendships(userId, kind, onProgress) {
   const users = [];
   let nextMaxId = null;
   let prevMaxId = null;
@@ -71,9 +70,8 @@ async function fetchAllFollowers(userId, onProgress) {
 
   do {
     page++;
-    const url = nextMaxId
-      ? `${API_BASE}/friendships/${userId}/followers/?count=200&max_id=${encodeURIComponent(nextMaxId)}`
-      : `${API_BASE}/friendships/${userId}/followers/?count=200`;
+    const base = `${API_BASE}/friendships/${userId}/${kind}/?count=200`;
+    const url = nextMaxId ? `${base}&max_id=${encodeURIComponent(nextMaxId)}` : base;
 
     const data = await igFetch(url);
     const batch = data?.users || [];
@@ -81,7 +79,7 @@ async function fetchAllFollowers(userId, onProgress) {
     prevMaxId = nextMaxId;
     nextMaxId = data?.next_max_id || null;
 
-    onProgress?.({ type: 'followers', count: users.length, done: !nextMaxId });
+    onProgress?.({ count: users.length, done: !nextMaxId });
 
     // Garde-fous : curseur bloqué ou trop de pages → on arrête
     if (nextMaxId && nextMaxId === prevMaxId) break;
@@ -94,49 +92,12 @@ async function fetchAllFollowers(userId, onProgress) {
   return users;
 }
 
-// Récupère TOUS les following avec pagination
-async function fetchAllFollowing(userId, onProgress) {
-  const users = [];
-  let nextMaxId = null;
-  let prevMaxId = null;
-  let page = 0;
-  const MAX_PAGES = 1000;
-
-  do {
-    page++;
-    const url = nextMaxId
-      ? `${API_BASE}/friendships/${userId}/following/?count=200&max_id=${encodeURIComponent(nextMaxId)}`
-      : `${API_BASE}/friendships/${userId}/following/?count=200`;
-
-    const data = await igFetch(url);
-    const batch = data?.users || [];
-    users.push(...batch);
-    prevMaxId = nextMaxId;
-    nextMaxId = data?.next_max_id || null;
-
-    onProgress?.({ type: 'following', count: users.length, done: !nextMaxId });
-
-    // Garde-fous : curseur bloqué ou trop de pages → on arrête
-    if (nextMaxId && nextMaxId === prevMaxId) break;
-    if (page >= MAX_PAGES) break;
-
-    if (nextMaxId) await sleep(800 + Math.random() * 400);
-  } while (nextMaxId);
-
-  return users;
-}
-
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// Écoute les messages du popup
+// Vérification de connexion (message one-shot)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'START_SCAN') {
-    runScan(sendResponse);
-    return true; // async response
-  }
-
   if (message.type === 'CHECK_LOGIN') {
     const { userId } = getSessionInfo();
     if (!userId) { sendResponse({ loggedIn: false }); return true; }
@@ -148,40 +109,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function runScan(sendResponse) {
-  try {
-    // Envoie des updates de progression au popup via storage
-    const updateProgress = (data) => {
-      chrome.storage.local.set({ scanProgress: data });
-    };
+// Scan via port long-vivant : la progression est streamée en direct,
+// sans polling de chrome.storage côté popup.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'scan') return;
+  port.onMessage.addListener((msg) => {
+    if (msg.type === 'START_SCAN') runScan(port);
+  });
+});
 
-    updateProgress({ status: 'getting_user', message: 'Récupération du profil...' });
+async function runScan(port) {
+  const send = (m) => { try { port.postMessage(m); } catch {} };
+
+  try {
+    send({ type: 'progress', status: 'getting_user' });
 
     const userId = await getMyUserId();
     if (!userId) {
-      sendResponse({ ok: false, error: 'Impossible de récupérer ton ID Instagram. Es-tu bien connecté ?' });
+      send({ type: 'error', error: 'Impossible de récupérer ton ID Instagram. Es-tu bien connecté ?' });
       return;
     }
 
-    updateProgress({ status: 'fetching_followers', message: 'Chargement des abonnés...', followersCount: 0, followingCount: 0 });
-
-    // Fetch followers et following en séquence (pas parallèle pour éviter le rate limit)
-    const followers = await fetchAllFollowers(userId, (p) => {
-      updateProgress({ status: 'fetching_followers', message: `Abonnés : ${p.count} chargés...`, followersCount: p.count, followingCount: 0 });
+    send({ type: 'progress', status: 'fetching_followers', followersCount: 0, followingCount: 0 });
+    const followers = await fetchAllFriendships(userId, 'followers', (p) => {
+      send({ type: 'progress', status: 'fetching_followers', followersCount: p.count, followingCount: 0 });
     });
 
-    updateProgress({ status: 'fetching_following', message: 'Chargement des abonnements...', followersCount: followers.length, followingCount: 0 });
-
-    const following = await fetchAllFollowing(userId, (p) => {
-      updateProgress({ status: 'fetching_following', message: `Abonnements : ${p.count} chargés...`, followersCount: followers.length, followingCount: p.count });
+    send({ type: 'progress', status: 'fetching_following', followersCount: followers.length, followingCount: 0 });
+    const following = await fetchAllFriendships(userId, 'following', (p) => {
+      send({ type: 'progress', status: 'fetching_following', followersCount: followers.length, followingCount: p.count });
     });
 
-    updateProgress({ status: 'analyzing', message: 'Analyse en cours...' });
+    send({ type: 'progress', status: 'analyzing' });
 
     // Calcul des "fantômes" — ceux que je suis mais qui ne me suivent pas
-    const followerIds = new Set(followers.map(u => u.pk || u.id));
-    const ghosts = following.filter(u => !followerIds.has(u.pk || u.id)).map(u => ({
-      id: u.pk || u.id,
+    const key = (u) => u.pk || u.id;
+    const followerIds = new Set(followers.map(key));
+    const ghosts = following.filter(u => !followerIds.has(key(u))).map(u => ({
+      id: key(u),
       username: u.username,
       full_name: u.full_name || '',
       profile_pic_url: u.profile_pic_url || '',
@@ -197,12 +162,10 @@ async function runScan(sendResponse) {
       scannedAt: new Date().toISOString()
     };
 
-    // Sauvegarde le résultat
-    chrome.storage.local.set({ lastResult: result, scanProgress: { status: 'done' } });
-    sendResponse(result);
+    chrome.storage.local.set({ lastResult: result });
+    send({ type: 'result', result });
 
   } catch (err) {
-    chrome.storage.local.set({ scanProgress: { status: 'error', message: err.message } });
-    sendResponse({ ok: false, error: err.message });
+    send({ type: 'error', error: err.message });
   }
 }
