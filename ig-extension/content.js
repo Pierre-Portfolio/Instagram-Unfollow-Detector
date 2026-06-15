@@ -21,10 +21,15 @@ function getSessionInfo() {
 // Backoff automatique sur rate-limit (429) avant d'abandonner
 async function igFetch(url, retries = 3) {
   const { csrfToken } = getSessionInfo();
+  // Sans csrftoken, Instagram renvoie des erreurs opaques : on échoue tôt
+  // avec un message clair plutôt que d'envoyer un header vide.
+  if (!csrfToken) {
+    throw new Error("Session Instagram introuvable. Connecte-toi sur instagram.com puis réessaie.");
+  }
   const res = await fetch(url, {
     headers: {
       'x-ig-app-id': '936619743392459',
-      'x-csrftoken': csrfToken || '',
+      'x-csrftoken': csrfToken,
       'x-asbd-id': '198387',
       'x-requested-with': 'XMLHttpRequest',
       'Accept': '*/*',

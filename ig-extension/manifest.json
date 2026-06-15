@@ -5,13 +5,13 @@
   "description": "Détecte les comptes Instagram qui ne te suivent pas en retour.",
   "permissions": [
     "storage",
-    "tabs"
+    "activeTab"
   ],
   "host_permissions": [
     "https://www.instagram.com/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "default-src 'none'; script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.cdninstagram.com https://*.fbcdn.net; font-src 'self'; connect-src 'self' https://www.instagram.com; base-uri 'none'; form-action 'none'"
   },
   "action": {
     "default_popup": "popup.html",
