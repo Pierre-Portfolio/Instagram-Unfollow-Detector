@@ -20,7 +20,8 @@ function getSessionInfo() {
 }
 
 // Fetch depuis le content script (même origine, credentials inclus)
-async function igFetch(url) {
+// Backoff automatique sur rate-limit (429) avant d'abandonner
+async function igFetch(url, retries = 3) {
   const { csrfToken } = getSessionInfo();
   const res = await fetch(url, {
     headers: {
@@ -32,6 +33,10 @@ async function igFetch(url) {
     },
     credentials: 'include'
   });
+  if (res.status === 429 && retries > 0) {
+    await sleep(2000 + Math.random() * 2000);
+    return igFetch(url, retries - 1);
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   return res.json();
 }
@@ -60,20 +65,27 @@ async function getMyUserId() {
 async function fetchAllFollowers(userId, onProgress) {
   const users = [];
   let nextMaxId = null;
+  let prevMaxId = null;
   let page = 0;
+  const MAX_PAGES = 1000;
 
   do {
     page++;
     const url = nextMaxId
-      ? `${API_BASE}/friendships/${userId}/followers/?count=200&max_id=${nextMaxId}`
+      ? `${API_BASE}/friendships/${userId}/followers/?count=200&max_id=${encodeURIComponent(nextMaxId)}`
       : `${API_BASE}/friendships/${userId}/followers/?count=200`;
 
     const data = await igFetch(url);
     const batch = data?.users || [];
     users.push(...batch);
+    prevMaxId = nextMaxId;
     nextMaxId = data?.next_max_id || null;
 
     onProgress?.({ type: 'followers', count: users.length, done: !nextMaxId });
+
+    // Garde-fous : curseur bloqué ou trop de pages → on arrête
+    if (nextMaxId && nextMaxId === prevMaxId) break;
+    if (page >= MAX_PAGES) break;
 
     // Anti-rate-limit : petite pause entre les requêtes
     if (nextMaxId) await sleep(800 + Math.random() * 400);
@@ -86,20 +98,27 @@ async function fetchAllFollowers(userId, onProgress) {
 async function fetchAllFollowing(userId, onProgress) {
   const users = [];
   let nextMaxId = null;
+  let prevMaxId = null;
   let page = 0;
+  const MAX_PAGES = 1000;
 
   do {
     page++;
     const url = nextMaxId
-      ? `${API_BASE}/friendships/${userId}/following/?count=200&max_id=${nextMaxId}`
+      ? `${API_BASE}/friendships/${userId}/following/?count=200&max_id=${encodeURIComponent(nextMaxId)}`
       : `${API_BASE}/friendships/${userId}/following/?count=200`;
 
     const data = await igFetch(url);
     const batch = data?.users || [];
     users.push(...batch);
+    prevMaxId = nextMaxId;
     nextMaxId = data?.next_max_id || null;
 
     onProgress?.({ type: 'following', count: users.length, done: !nextMaxId });
+
+    // Garde-fous : curseur bloqué ou trop de pages → on arrête
+    if (nextMaxId && nextMaxId === prevMaxId) break;
+    if (page >= MAX_PAGES) break;
 
     if (nextMaxId) await sleep(800 + Math.random() * 400);
   } while (nextMaxId);
@@ -120,7 +139,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'CHECK_LOGIN') {
     const { userId } = getSessionInfo();
-    sendResponse({ loggedIn: !!userId, userId });
+    if (!userId) { sendResponse({ loggedIn: false }); return true; }
+    // Récupère le username pour l'afficher dans le popup
+    igFetch(`${API_BASE}/accounts/current_user/?edit=true`)
+      .then(d => sendResponse({ loggedIn: true, userId, username: d?.user?.username || null }))
+      .catch(() => sendResponse({ loggedIn: true, userId }));
     return true;
   }
 });
