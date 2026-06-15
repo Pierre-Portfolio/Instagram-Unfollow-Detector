@@ -333,7 +333,7 @@ function exportCSV() {
   };
   const rows = [['username', 'full_name', 'profile_url', 'is_private', 'is_verified']].concat(
     currentResult.ghosts.map(function(u) {
-      return [u.username, u.full_name || '', 'https://www.instagram.com/' + u.username + '/', u.is_private ? 'oui' : 'non', u.is_verified ? 'oui' : 'non'];
+      return [u.username, u.full_name || '', 'https://www.instagram.com/' + encodeURIComponent(u.username || '') + '/', u.is_private ? 'oui' : 'non', u.is_verified ? 'oui' : 'non'];
     })
   );
   const csv = '﻿' + rows.map(function(r) { return r.map(esc).join(','); }).join('\r\n');
