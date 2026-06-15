@@ -174,26 +174,79 @@ function renderGhostList(ghosts) {
   const label = document.getElementById('ghostCountLabel');
   label.textContent = ghosts.length + ' compte' + (ghosts.length > 1 ? 's' : '') + ' affiché' + (ghosts.length > 1 ? 's' : '');
 
+  // Construction via le DOM (textContent/setAttribute) — pas d'innerHTML
+  // avec des données distantes, pour éviter toute injection XSS.
+  listEl.textContent = '';
+
   if (ghosts.length === 0) {
-    listEl.innerHTML = '<div class="empty-ghosts"><div class="em">🎉</div>Tout le monde te suit en retour !</div>';
+    const empty = document.createElement('div');
+    empty.className = 'empty-ghosts';
+    const em = document.createElement('div');
+    em.className = 'em';
+    em.textContent = '🎉';
+    empty.appendChild(em);
+    empty.appendChild(document.createTextNode('Tout le monde te suit en retour !'));
+    listEl.appendChild(empty);
     return;
   }
 
-  listEl.innerHTML = ghosts.map(function(u, i) {
-    const initials = u.username.slice(0, 2).toUpperCase();
-    const igUrl = 'https://www.instagram.com/' + u.username + '/';
-    const badges = (u.is_private ? '<span class="badge-small badge-private">PRIVÉ</span>' : '') +
-                   (u.is_verified ? '<span class="badge-small badge-verified">✓</span>' : '');
-    const avatarContent = u.profile_pic_url
-      ? '<img src="' + u.profile_pic_url + '" alt="" onerror="this.style.display=\'none\'">'
-      : initials;
-    return '<a class="ghost-item" href="' + igUrl + '" target="_blank" style="animation-delay:' + Math.min(i * 0.02, 0.5) + 's">' +
-      '<div class="ghost-avatar">' + avatarContent + '</div>' +
-      '<div class="ghost-name">@' + u.username + '</div>' +
-      '<div class="ghost-badges">' + badges + '</div>' +
-      '<span class="arrow-icon">↗</span>' +
-    '</a>';
-  }).join('');
+  const frag = document.createDocumentFragment();
+  ghosts.forEach(function(u, i) {
+    const username = String(u.username || '');
+
+    const item = document.createElement('a');
+    item.className = 'ghost-item';
+    item.href = 'https://www.instagram.com/' + encodeURIComponent(username) + '/';
+    item.target = '_blank';
+    item.rel = 'noopener noreferrer';
+    item.style.animationDelay = Math.min(i * 0.02, 0.5) + 's';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'ghost-avatar';
+    const picUrl = typeof u.profile_pic_url === 'string' ? u.profile_pic_url : '';
+    if (/^https:\/\//i.test(picUrl)) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.addEventListener('error', function() {
+        img.remove();
+        avatar.textContent = username.slice(0, 2).toUpperCase();
+      });
+      img.src = picUrl;
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = username.slice(0, 2).toUpperCase();
+    }
+
+    const name = document.createElement('div');
+    name.className = 'ghost-name';
+    name.textContent = '@' + username;
+
+    const badges = document.createElement('div');
+    badges.className = 'ghost-badges';
+    if (u.is_private) {
+      const b = document.createElement('span');
+      b.className = 'badge-small badge-private';
+      b.textContent = 'PRIVÉ';
+      badges.appendChild(b);
+    }
+    if (u.is_verified) {
+      const b = document.createElement('span');
+      b.className = 'badge-small badge-verified';
+      b.textContent = '✓';
+      badges.appendChild(b);
+    }
+
+    const arrow = document.createElement('span');
+    arrow.className = 'arrow-icon';
+    arrow.textContent = '↗';
+
+    item.appendChild(avatar);
+    item.appendChild(name);
+    item.appendChild(badges);
+    item.appendChild(arrow);
+    frag.appendChild(item);
+  });
+  listEl.appendChild(frag);
 }
 
 function filterGhosts() {
@@ -210,7 +263,12 @@ function filterGhosts() {
 // ── Export ────────────────────────────────────────────
 function exportCSV() {
   if (!currentResult || !currentResult.ghosts.length) return;
-  const esc = function(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
+  const esc = function(v) {
+    let s = String(v == null ? '' : v);
+    // Anti CSV-injection : neutralise les formules (=, +, -, @, tab, CR)
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return '"' + s.replace(/"/g, '""') + '"';
+  };
   const rows = [['username', 'full_name', 'profile_url', 'is_private', 'is_verified']].concat(
     currentResult.ghosts.map(function(u) {
       return [u.username, u.full_name || '', 'https://www.instagram.com/' + u.username + '/', u.is_private ? 'oui' : 'non', u.is_verified ? 'oui' : 'non'];
