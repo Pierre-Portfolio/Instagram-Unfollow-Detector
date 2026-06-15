@@ -10,14 +10,22 @@ let _session = null;
 function getSessionInfo() {
   if (_session) return _session;
 
+  // Parsing robuste : on coupe sur le PREMIER '=' uniquement, sinon une
+  // valeur contenant '=' (ex. base64) serait tronquée.
   const cookies = document.cookie.split(';').reduce((acc, c) => {
-    const [k, v] = c.trim().split('=');
-    acc[k] = v;
+    const idx = c.indexOf('=');
+    if (idx === -1) return acc;
+    acc[c.slice(0, idx).trim()] = c.slice(idx + 1).trim();
     return acc;
   }, {});
 
-  _session = { userId: cookies['ds_user_id'], csrfToken: cookies['csrftoken'] };
-  return _session;
+  const session = { userId: cookies['ds_user_id'], csrfToken: cookies['csrftoken'] };
+  // On ne mémoïse QUE si la session est complète. La page Instagram (SPA) a
+  // pu être chargée avant connexion : figer une session vide casserait le
+  // scan même après une connexion à chaud. Tant que les cookies manquent,
+  // on re-parse à chaque appel.
+  if (session.userId && session.csrfToken) _session = session;
+  return _session || session;
 }
 
 // Fetch depuis le content script (même origine, credentials inclus)
@@ -72,6 +80,7 @@ async function getMyUserId() {
 // kind : 'followers' | 'following'
 async function fetchAllFriendships(userId, kind, onProgress) {
   const users = [];
+  const seen = new Set();
   let nextMaxId = null;
   let prevMaxId = null;
   let page = 0;
@@ -84,7 +93,15 @@ async function fetchAllFriendships(userId, kind, onProgress) {
 
     const data = await igFetch(url);
     const batch = data?.users || [];
-    users.push(...batch);
+    // Déduplication : si IG renvoie un curseur qui « tourne » (change à
+    // chaque page mais re-sert les mêmes comptes), on n'accumule pas de
+    // doublons et on évite de gonfler la mémoire jusqu'à MAX_PAGES.
+    for (const u of batch) {
+      const id = String(u.pk ?? u.id ?? '');
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      users.push(u);
+    }
     prevMaxId = nextMaxId;
     nextMaxId = data?.next_max_id || null;
 

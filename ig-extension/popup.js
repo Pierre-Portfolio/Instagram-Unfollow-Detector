@@ -4,6 +4,17 @@ let currentResult = null;
 let filterTimer = null;
 let scanning = false;
 
+// Vérifie qu'on est bien sur le host Instagram. `String.includes` matcherait
+// aussi « notinstagram.com » ou « instagram.com.evil.com » : on compare donc
+// le hostname exact.
+function isInstagramUrl(url) {
+  try {
+    return new URL(url).hostname === 'www.instagram.com';
+  } catch {
+    return false;
+  }
+}
+
 // ── Enregistrement des listeners (DOMContentLoaded) ───
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnScan').addEventListener('click', startScan);
@@ -20,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Init ──────────────────────────────────────────────
 async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const isIG = tab?.url?.includes('instagram.com');
+  const isIG = isInstagramUrl(tab?.url);
 
   if (!isIG) {
     showScreen('screenNotIG');
@@ -92,7 +103,7 @@ async function startScan() {
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  if (!tab?.url?.includes('instagram.com')) {
+  if (!isInstagramUrl(tab?.url)) {
     scanning = false;
     setBtnLoading(false);
     showScreen('screenNotIG');
@@ -152,6 +163,14 @@ async function startScan() {
 }
 
 // ── Progression (poussée par le content script) ───────
+// L'API Instagram ne renvoie pas de total : on ne peut pas afficher un vrai
+// pourcentage. On fait croître la barre de façon asymptotique avec le nombre
+// d'éléments chargés (15% → 90%) pour qu'elle bouge visiblement sans jamais
+// « finir » prématurément.
+function approxWidth(count) {
+  return Math.min(90, 15 + (count || 0) * 0.05) + '%';
+}
+
 function updateProgress(p) {
   const statusEl = document.getElementById('scanStatusText');
   const detailEl = document.getElementById('scanDetailText');
@@ -163,14 +182,14 @@ function updateProgress(p) {
     statusEl.textContent = 'Chargement des abonnés...';
     detailEl.textContent = 'Abonnés : ' + (p.followersCount || 0) + ' chargés...';
     document.getElementById('progFollowersCount').textContent = p.followersCount || 0;
-    document.getElementById('progFollowers').style.width = p.followersCount > 0 ? '70%' : '15%';
+    document.getElementById('progFollowers').style.width = approxWidth(p.followersCount);
   } else if (p.status === 'fetching_following') {
     statusEl.textContent = 'Chargement des abonnements...';
     detailEl.textContent = 'Abonnements : ' + (p.followingCount || 0) + ' chargés...';
     document.getElementById('progFollowersCount').textContent = p.followersCount || 0;
     document.getElementById('progFollowingCount').textContent = p.followingCount || 0;
     document.getElementById('progFollowers').style.width = '100%';
-    document.getElementById('progFollowing').style.width = p.followingCount > 0 ? '70%' : '15%';
+    document.getElementById('progFollowing').style.width = approxWidth(p.followingCount);
   } else if (p.status === 'analyzing') {
     statusEl.textContent = 'Analyse en cours...';
     detailEl.textContent = 'Comparaison des listes';
