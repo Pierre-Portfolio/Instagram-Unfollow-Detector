@@ -38,6 +38,15 @@ async function init() {
     return;
   }
 
+  // Le résultat précédent est indépendant de la session : on le charge d'abord
+  // (await) pour éviter un re-rendu/scintillement quand la vérif de login
+  // arrive ensuite de façon asynchrone.
+  const { lastResult } = await chrome.storage.local.get(['lastResult']);
+  if (lastResult?.ok && lastResult.ghosts) {
+    currentResult = lastResult;
+    showPrevResult(lastResult);
+  }
+
   chrome.tabs.sendMessage(tab.id, { type: 'CHECK_LOGIN' }, (resp) => {
     if (chrome.runtime.lastError || !resp) {
       showScreen('screenHome');
@@ -56,13 +65,6 @@ async function init() {
       document.getElementById('btnScan').disabled = true;
     }
     showScreen('screenHome');
-  });
-
-  chrome.storage.local.get(['lastResult'], ({ lastResult }) => {
-    if (lastResult?.ok && lastResult.ghosts) {
-      currentResult = lastResult;
-      showPrevResult(lastResult);
-    }
   });
 }
 

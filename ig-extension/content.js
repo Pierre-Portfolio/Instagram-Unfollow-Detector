@@ -47,9 +47,12 @@ async function igFetch(url, retries = 3) {
     },
     credentials: 'include'
   });
-  // Backoff sur rate-limit (429) ET sur erreurs serveur transitoires (5xx)
+  // Backoff EXPONENTIEL sur rate-limit (429) et erreurs serveur (5xx) :
+  // 2s, 4s, 8s (+ jitter) — respecte mieux les limites d'Instagram et
+  // reduit le risque de blocage temporaire qu'un delai fixe.
   if ((res.status === 429 || res.status >= 500) && retries > 0) {
-    await sleep(2000 + Math.random() * 2000);
+    const attempt = 3 - retries; // 0, 1, 2
+    await sleep(2000 * Math.pow(2, attempt) + Math.random() * 1000);
     return igFetch(url, retries - 1);
   }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -78,7 +81,9 @@ async function getMyUserId() {
 
 // Récupère TOUS les abonnés OU abonnements avec pagination.
 // kind : 'followers' | 'following'
-async function fetchAllFriendships(userId, kind, onProgress) {
+// idsOnly : ne retient que l'ensemble des IDs (Set) au lieu des objets
+// complets. Utile pour les abonnés, dont seuls les IDs servent au calcul.
+async function fetchAllFriendships(userId, kind, onProgress, idsOnly = false) {
   const users = [];
   const seen = new Set();
   let nextMaxId = null;
@@ -100,12 +105,12 @@ async function fetchAllFriendships(userId, kind, onProgress) {
       const id = String(u.pk ?? u.id ?? '');
       if (id && seen.has(id)) continue;
       if (id) seen.add(id);
-      users.push(u);
+      if (!idsOnly) users.push(u);
     }
     prevMaxId = nextMaxId;
     nextMaxId = data?.next_max_id || null;
 
-    onProgress?.({ count: users.length, done: !nextMaxId });
+    onProgress?.({ count: idsOnly ? seen.size : users.length, done: !nextMaxId });
 
     // Garde-fous : page vide, curseur bloqué ou trop de pages → on arrête.
     // La page vide protège contre les boucles où IG renvoie un curseur qui
@@ -118,7 +123,7 @@ async function fetchAllFriendships(userId, kind, onProgress) {
     if (nextMaxId) await sleep(800 + Math.random() * 400);
   } while (nextMaxId);
 
-  return users;
+  return idsOnly ? seen : users;
 }
 
 function sleep(ms) {
@@ -160,36 +165,41 @@ async function runScan(port) {
     }
 
     send({ type: 'progress', status: 'fetching_followers', followersCount: 0, followingCount: 0 });
-    const followers = await fetchAllFriendships(userId, 'followers', (p) => {
+    // Abonnés : seuls les IDs servent au calcul, on ne retient donc qu'un Set
+    // (idsOnly) au lieu de milliers d'objets complets.
+    const followerIds = await fetchAllFriendships(userId, 'followers', (p) => {
       send({ type: 'progress', status: 'fetching_followers', followersCount: p.count, followingCount: 0 });
-    });
+    }, true);
+    const totalFollowers = followerIds.size;
 
-    send({ type: 'progress', status: 'fetching_following', followersCount: followers.length, followingCount: 0 });
+    send({ type: 'progress', status: 'fetching_following', followersCount: totalFollowers, followingCount: 0 });
     const following = await fetchAllFriendships(userId, 'following', (p) => {
-      send({ type: 'progress', status: 'fetching_following', followersCount: followers.length, followingCount: p.count });
+      send({ type: 'progress', status: 'fetching_following', followersCount: totalFollowers, followingCount: p.count });
     });
 
     send({ type: 'progress', status: 'analyzing' });
 
-    // Calcul des "fantômes" — ceux que je suis mais qui ne me suivent pas.
-    // On normalise l'ID en chaîne : selon la route, IG renvoie pk en number
-    // ou en string, et un Set ne ferait pas correspondre 123 et "123".
-    const key = (u) => String(u.pk ?? u.id ?? '');
-    const followerIds = new Set();
-    for (const u of followers) followerIds.add(key(u));
-    const ghosts = following.filter(u => !followerIds.has(key(u))).map(u => ({
-      id: key(u),
-      username: u.username,
-      full_name: u.full_name || '',
-      profile_pic_url: u.profile_pic_url || '',
-      is_private: u.is_private || false,
-      is_verified: u.is_verified || false,
-    }));
+    // Fantômes = ceux que je suis mais qui ne me suivent pas. Une seule passe,
+    // la clé (ID en chaîne, car IG renvoie pk en number ou string) n'est
+    // calculée qu'une fois par compte.
+    const ghosts = [];
+    for (const u of following) {
+      const id = String(u.pk ?? u.id ?? '');
+      if (followerIds.has(id)) continue;
+      ghosts.push({
+        id,
+        username: u.username,
+        full_name: u.full_name || '',
+        profile_pic_url: u.profile_pic_url || '',
+        is_private: u.is_private || false,
+        is_verified: u.is_verified || false,
+      });
+    }
 
     const result = {
       ok: true,
       ghosts,
-      totalFollowers: followers.length,
+      totalFollowers,
       totalFollowing: following.length,
       scannedAt: new Date().toISOString()
     };
