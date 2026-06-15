@@ -31,7 +31,8 @@ async function igFetch(url, retries = 3) {
     },
     credentials: 'include'
   });
-  if (res.status === 429 && retries > 0) {
+  // Backoff sur rate-limit (429) ET sur erreurs serveur transitoires (5xx)
+  if ((res.status === 429 || res.status >= 500) && retries > 0) {
     await sleep(2000 + Math.random() * 2000);
     return igFetch(url, retries - 1);
   }
@@ -81,7 +82,10 @@ async function fetchAllFriendships(userId, kind, onProgress) {
 
     onProgress?.({ count: users.length, done: !nextMaxId });
 
-    // Garde-fous : curseur bloqué ou trop de pages → on arrête
+    // Garde-fous : page vide, curseur bloqué ou trop de pages → on arrête.
+    // La page vide protège contre les boucles où IG renvoie un curseur qui
+    // change à chaque fois mais sans plus aucun utilisateur.
+    if (batch.length === 0) break;
     if (nextMaxId && nextMaxId === prevMaxId) break;
     if (page >= MAX_PAGES) break;
 
@@ -142,8 +146,10 @@ async function runScan(port) {
 
     send({ type: 'progress', status: 'analyzing' });
 
-    // Calcul des "fantômes" — ceux que je suis mais qui ne me suivent pas
-    const key = (u) => u.pk || u.id;
+    // Calcul des "fantômes" — ceux que je suis mais qui ne me suivent pas.
+    // On normalise l'ID en chaîne : selon la route, IG renvoie pk en number
+    // ou en string, et un Set ne ferait pas correspondre 123 et "123".
+    const key = (u) => String(u.pk ?? u.id ?? '');
     const followerIds = new Set(followers.map(key));
     const ghosts = following.filter(u => !followerIds.has(key(u))).map(u => ({
       id: key(u),

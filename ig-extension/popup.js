@@ -2,6 +2,7 @@
 
 let currentResult = null;
 let filterTimer = null;
+let scanning = false;
 
 // ── Enregistrement des listeners (DOMContentLoaded) ───
 document.addEventListener('DOMContentLoaded', () => {
@@ -35,6 +36,13 @@ async function init() {
     if (resp.loggedIn) {
       document.getElementById('profileName').textContent = '@' + (resp.username || 'moi');
       document.getElementById('profileStatus').textContent = 'Session active · ID ' + String(resp.userId || '').slice(0, 8) + '...';
+      document.getElementById('btnScan').disabled = false;
+    } else {
+      // Onglet Instagram ouvert mais aucune session : on le signale
+      // explicitement au lieu de laisser le texte « Connecté » par défaut.
+      document.getElementById('profileName').textContent = 'Non connecté';
+      document.getElementById('profileStatus').textContent = 'Connecte-toi sur Instagram puis rouvre ce popup';
+      document.getElementById('btnScan').disabled = true;
     }
     showScreen('screenHome');
   });
@@ -76,11 +84,16 @@ function showPrevResult(result) {
 
 // ── Scan ──────────────────────────────────────────────
 async function startScan() {
+  // Verrou : empêche de lancer plusieurs scans en parallèle (boutons
+  // « Lancer le scan », « Nouveau scan » et « Rescan » partagent ce flux).
+  if (scanning) return;
+  scanning = true;
   setBtnLoading(true);
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!tab?.url?.includes('instagram.com')) {
+    scanning = false;
     setBtnLoading(false);
     showScreen('screenNotIG');
     return;
@@ -101,6 +114,7 @@ async function startScan() {
   try {
     port = chrome.tabs.connect(tab.id, { name: 'scan' });
   } catch (e) {
+    scanning = false;
     setBtnLoading(false);
     showError('Impossible de communiquer avec Instagram.\nRecharge la page instagram.com et réessaie.');
     return;
@@ -111,6 +125,7 @@ async function startScan() {
       updateProgress(msg);
     } else if (msg.type === 'result') {
       settled = true;
+      scanning = false;
       setBtnLoading(false);
       currentResult = msg.result;
       renderResults(msg.result);
@@ -118,6 +133,7 @@ async function startScan() {
       port.disconnect();
     } else if (msg.type === 'error') {
       settled = true;
+      scanning = false;
       setBtnLoading(false);
       showError(msg.error || "Erreur inconnue. Assure-toi d'être connecté à Instagram.");
       port.disconnect();
@@ -127,6 +143,7 @@ async function startScan() {
   // Déconnexion non sollicitée (content script absent / page rechargée)
   port.onDisconnect.addListener(() => {
     if (settled) return;
+    scanning = false;
     setBtnLoading(false);
     showError('Impossible de communiquer avec Instagram.\nRecharge la page instagram.com et réessaie.');
   });

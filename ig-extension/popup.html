@@ -142,13 +142,6 @@
   .scan-btn:active { transform: translateY(0); }
   .scan-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
-  .last-scan {
-    font-size: 0.7rem;
-    color: var(--muted);
-    font-family: 'DM Mono', monospace;
-    text-align: center;
-  }
-
   /* Previous result preview */
   .prev-result {
     background: var(--surface);
@@ -620,8 +613,6 @@
   </div>
 
   <button class="scan-btn" id="btnScan">🔍 Lancer le scan</button>
-
-  <div class="last-scan" id="lastScanInfo"></div>
 
   <div class="prev-result" id="prevResult" style="display:none">
     <div class="prev-result-header">
