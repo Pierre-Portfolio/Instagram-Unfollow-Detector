@@ -3,18 +3,21 @@
 
 const API_BASE = 'https://www.instagram.com/api/v1';
 
-// Récupère le user_id et le csrftoken depuis les cookies
+// Récupère le user_id et le csrftoken depuis les cookies.
+// Mémoïsé : ces valeurs ne changent pas pendant un scan, inutile de
+// re-parser document.cookie à chaque requête.
+let _session = null;
 function getSessionInfo() {
+  if (_session) return _session;
+
   const cookies = document.cookie.split(';').reduce((acc, c) => {
     const [k, v] = c.trim().split('=');
     acc[k] = v;
     return acc;
   }, {});
 
-  const userId = cookies['ds_user_id'];
-  const csrfToken = cookies['csrftoken'];
-
-  return { userId, csrfToken };
+  _session = { userId: cookies['ds_user_id'], csrfToken: cookies['csrftoken'] };
+  return _session;
 }
 
 // Fetch depuis le content script (même origine, credentials inclus)
@@ -155,7 +158,8 @@ async function runScan(port) {
     // On normalise l'ID en chaîne : selon la route, IG renvoie pk en number
     // ou en string, et un Set ne ferait pas correspondre 123 et "123".
     const key = (u) => String(u.pk ?? u.id ?? '');
-    const followerIds = new Set(followers.map(key));
+    const followerIds = new Set();
+    for (const u of followers) followerIds.add(key(u));
     const ghosts = following.filter(u => !followerIds.has(key(u))).map(u => ({
       id: key(u),
       username: u.username,

@@ -192,10 +192,14 @@ function renderResults(result) {
   renderGhostList(result.ghosts);
 }
 
+function setGhostCount(n) {
+  const label = document.getElementById('ghostCountLabel');
+  label.textContent = n + ' compte' + (n > 1 ? 's' : '') + ' affiché' + (n > 1 ? 's' : '');
+}
+
 function renderGhostList(ghosts) {
   const listEl = document.getElementById('ghostList');
-  const label = document.getElementById('ghostCountLabel');
-  label.textContent = ghosts.length + ' compte' + (ghosts.length > 1 ? 's' : '') + ' affiché' + (ghosts.length > 1 ? 's' : '');
+  setGhostCount(ghosts.length);
 
   // Construction via le DOM (textContent/setAttribute) — pas d'innerHTML
   // avec des données distantes, pour éviter toute injection XSS.
@@ -223,6 +227,9 @@ function renderGhostList(ghosts) {
     item.target = '_blank';
     item.rel = 'noopener noreferrer';
     item.style.animationDelay = Math.min(i * 0.02, 0.5) + 's';
+    // Texte de recherche pré-calculé : le filtrage (opt 4) se contente de
+    // masquer/afficher les items existants au lieu de reconstruire le DOM.
+    item._search = (username + ' ' + (u.full_name || '')).toLowerCase();
 
     const avatar = document.createElement('div');
     avatar.className = 'ghost-avatar';
@@ -230,6 +237,8 @@ function renderGhostList(ghosts) {
     if (/^https:\/\//i.test(picUrl)) {
       const img = document.createElement('img');
       img.alt = '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
       img.addEventListener('error', function() {
         img.remove();
         avatar.textContent = username.slice(0, 2).toUpperCase();
@@ -280,13 +289,18 @@ function onFilterInput() {
 
 function filterGhosts() {
   if (!currentResult) return;
-  const q = document.getElementById('searchGhosts').value.toLowerCase();
-  const filtered = q
-    ? currentResult.ghosts.filter(function(u) {
-        return u.username.toLowerCase().includes(q) || (u.full_name || '').toLowerCase().includes(q);
-      })
-    : currentResult.ghosts;
-  renderGhostList(filtered);
+  const q = document.getElementById('searchGhosts').value.toLowerCase().trim();
+  // Opt 4 : on ne reconstruit pas le DOM à chaque frappe — on masque/affiche
+  // les items déjà rendus via leur texte de recherche pré-calculé.
+  const items = document.getElementById('ghostList').children;
+  let visible = 0;
+  for (const item of items) {
+    if (typeof item._search !== 'string') continue; // ignore l'état "vide"
+    const match = !q || item._search.includes(q);
+    item.style.display = match ? '' : 'none';
+    if (match) visible++;
+  }
+  setGhostCount(visible);
 }
 
 // ── Export ────────────────────────────────────────────
