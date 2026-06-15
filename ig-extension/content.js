@@ -105,11 +105,27 @@ async function getMyUserId() {
   return data?.user?.pk_id || data?.user?.pk;
 }
 
+// Projette un objet utilisateur IG (riche : ~30 champs) sur les seuls champs
+// utiles. Réduit le pic mémoire pour les gros comptes (following gardé en
+// entier jusqu'à l'analyse). `pk` est normalisé en chaîne dès maintenant.
+function slimUser(u) {
+  return {
+    pk: String(u.pk ?? u.id ?? ''),
+    username: u.username,
+    full_name: u.full_name || '',
+    profile_pic_url: u.profile_pic_url || '',
+    is_private: u.is_private || false,
+    is_verified: u.is_verified || false,
+  };
+}
+
 // Récupère TOUS les abonnés OU abonnements avec pagination.
 // kind : 'followers' | 'following'
-// idsOnly : ne retient que l'ensemble des IDs (Set) au lieu des objets
-// complets. Utile pour les abonnés, dont seuls les IDs servent au calcul.
-async function fetchAllFriendships(userId, kind, onProgress, idsOnly = false) {
+// opts.idsOnly : ne retient que l'ensemble des IDs (Set) au lieu des objets.
+//   Utile pour les abonnés, dont seuls les IDs servent au calcul.
+// opts.project : fonction de projection appliquée à chaque utilisateur retenu
+//   (allège les objets conservés). Ignorée si idsOnly.
+async function fetchAllFriendships(userId, kind, onProgress, { idsOnly = false, project = null } = {}) {
   const users = [];
   const seen = new Set();
   let nextMaxId = null;
@@ -132,7 +148,7 @@ async function fetchAllFriendships(userId, kind, onProgress, idsOnly = false) {
       const id = String(u.pk ?? u.id ?? '');
       if (id && seen.has(id)) continue;
       if (id) seen.add(id);
-      if (!idsOnly) users.push(u);
+      if (!idsOnly) users.push(project ? project(u) : u);
     }
     const addedNew = seen.size - seenBefore;
     prevMaxId = nextMaxId;
@@ -167,9 +183,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'CHECK_LOGIN') {
     const { userId } = getSessionInfo();
     if (!userId) { sendResponse({ loggedIn: false }); return true; }
-    // Récupère le username pour l'afficher dans le popup
+    // Récupère le username pour l'afficher dans le popup, et le met en cache :
+    // le prochain popup l'affiche instantanément sans attendre cet appel réseau.
     igFetch(`${API_BASE}/accounts/current_user/?edit=true`)
-      .then(d => sendResponse({ loggedIn: true, userId, username: d?.user?.username || null }))
+      .then(d => {
+        const username = d?.user?.username || null;
+        if (username) chrome.storage.local.set({ session: { userId, username } });
+        sendResponse({ loggedIn: true, userId, username });
+      })
       .catch(() => sendResponse({ loggedIn: true, userId }));
     return true;
   }
@@ -201,30 +222,31 @@ async function runScan(port) {
     // (idsOnly) au lieu de milliers d'objets complets.
     const followerIds = await fetchAllFriendships(userId, 'followers', (p) => {
       send({ type: 'progress', status: 'fetching_followers', followersCount: p.count, followingCount: 0 });
-    }, true);
+    }, { idsOnly: true });
     const totalFollowers = followerIds.size;
 
     send({ type: 'progress', status: 'fetching_following', followersCount: totalFollowers, followingCount: 0 });
+    // On ne garde que les champs utiles (slimUser) : objets ~10x plus légers
+    // pour les comptes suivant des milliers de personnes.
     const following = await fetchAllFriendships(userId, 'following', (p) => {
       send({ type: 'progress', status: 'fetching_following', followersCount: totalFollowers, followingCount: p.count });
-    });
+    }, { project: slimUser });
 
     send({ type: 'progress', status: 'analyzing' });
 
-    // Fantômes = ceux que je suis mais qui ne me suivent pas. Une seule passe,
-    // la clé (ID en chaîne, car IG renvoie pk en number ou string) n'est
-    // calculée qu'une fois par compte.
+    // Fantômes = ceux que je suis mais qui ne me suivent pas. Une seule passe.
+    // Les objets following sont déjà slim (slimUser) : pk normalisé en chaîne
+    // et champs prêts à l'emploi.
     const ghosts = [];
     for (const u of following) {
-      const id = String(u.pk ?? u.id ?? '');
-      if (followerIds.has(id)) continue;
+      if (followerIds.has(u.pk)) continue;
       ghosts.push({
-        id,
+        id: u.pk,
         username: u.username,
-        full_name: u.full_name || '',
-        profile_pic_url: u.profile_pic_url || '',
-        is_private: u.is_private || false,
-        is_verified: u.is_verified || false,
+        full_name: u.full_name,
+        profile_pic_url: u.profile_pic_url,
+        is_private: u.is_private,
+        is_verified: u.is_verified,
       });
     }
 

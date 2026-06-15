@@ -41,10 +41,17 @@ async function init() {
   // Le résultat précédent est indépendant de la session : on le charge d'abord
   // (await) pour éviter un re-rendu/scintillement quand la vérif de login
   // arrive ensuite de façon asynchrone.
-  const { lastResult } = await chrome.storage.local.get(['lastResult']);
+  const { lastResult, session } = await chrome.storage.local.get(['lastResult', 'session']);
   if (lastResult?.ok && lastResult.ghosts) {
     currentResult = lastResult;
     showPrevResult(lastResult);
+  }
+
+  // Affichage optimiste du username mis en cache : le popup montre le compte
+  // tout de suite, sans attendre la réponse réseau de CHECK_LOGIN (qui le
+  // confirmera/corrigera ensuite).
+  if (session?.username) {
+    document.getElementById('profileName').textContent = '@' + session.username;
   }
 
   chrome.tabs.sendMessage(tab.id, { type: 'CHECK_LOGIN' }, (resp) => {
